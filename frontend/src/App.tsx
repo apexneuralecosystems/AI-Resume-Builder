@@ -1558,15 +1558,13 @@ export default function App() {
 
       const { default: html2pdf } = await import('html2pdf.js')
       const widthPx = Math.max(capture.scrollWidth, capture.clientWidth)
-      const highQualityScale = Math.min(4, Math.max(3, window.devicePixelRatio * 2))
-
       await html2pdf()
         .set({
           margin: [PRINT_TOP_MARGIN_MM, 0, PRINT_BOTTOM_SAFE_ZONE_MM, 0],
           filename: `${safeName}.pdf`,
-          image: { type: 'png', quality: 1 },
+          image: { type: 'jpeg', quality: 0.98 },
           html2canvas: {
-            scale: highQualityScale,
+            scale: 2.5,
             useCORS: true,
             logging: false,
             backgroundColor: '#ffffff',
@@ -1574,14 +1572,14 @@ export default function App() {
             scrollX: -window.scrollX,
             windowWidth: widthPx,
           },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
           pagebreak: { mode: ['css'] },
         })
         .from(capture)
         .save()
     } catch (e) {
       console.error(e)
-      alert('Could not build the PDF. Please try again.')
+      alert('Could not build the PDF at high quality. Please try again with a shorter resume, or use Print as backup.')
     } finally {
       document.body.removeChild(host)
       setPdfExporting(false)
