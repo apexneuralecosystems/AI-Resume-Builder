@@ -966,17 +966,22 @@ export function ResumeTemplate({
                     </div>
 
                     {p.technology && (
-                      <div className="text-[11px] text-slate-700 mt-[2px]">
-                        <span className="font-semibold text-slate-600">Stack: </span>
-                        {p.technology}
+                      <div className="mt-[2px]">
+                        <div className="text-[11px] font-semibold text-slate-700">Stack:</div>
+                        <div
+                          className="text-[11px] text-slate-800 leading-[1.4]"
+                          style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', textIndent: 0, marginLeft: 0, paddingLeft: 0 }}
+                        >
+                          {p.technology}
+                        </div>
                       </div>
                     )}
                   </div>
 
                   {p.description && (
                     <div
-                      className="text-[11px] text-slate-800 mt-[2px] leading-snug"
-                      style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                      className="text-[11px] text-slate-800 mt-[3px] leading-[1.45]"
+                      style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', textIndent: 0, marginLeft: 0, paddingLeft: 0 }}
                     >
                       {p.description}
                     </div>
