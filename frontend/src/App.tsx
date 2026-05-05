@@ -414,6 +414,10 @@ export default function App() {
   const MM_TO_PX = 96 / 25.4
   const A4_WIDTH_PX = Math.round(210 * MM_TO_PX)
   const PAGE_HEIGHT_PX = Math.round(297 * MM_TO_PX)
+  const PREVIEW_PAGE_GAP_PX = 14
+  const PRINT_TOP_MARGIN_MM = 5
+  const PRINT_BOTTOM_SAFE_ZONE_MM = 5
+  const PRINTABLE_PAGE_HEIGHT_PX = Math.round((297 - PRINT_TOP_MARGIN_MM - PRINT_BOTTOM_SAFE_ZONE_MM) * MM_TO_PX)
   const canUndo = Boolean(selected && (historyById[selected.id]?.past.length ?? 0) > 0)
   const canRedo = Boolean(selected && (historyById[selected.id]?.future.length ?? 0) > 0)
 
@@ -634,12 +638,14 @@ export default function App() {
     const updatePages = () => {
       const el = measureRef.current?.querySelector('#resume-printable-area') as HTMLElement | null
       const h = el?.scrollHeight ?? PAGE_HEIGHT_PX
-      setPreviewPages(Math.max(1, Math.ceil(h / PAGE_HEIGHT_PX)))
+      // Match print preview pagination by using printable content height
+      // (A4 height minus top/bottom @page margins).
+      setPreviewPages(Math.max(1, Math.ceil(h / PRINTABLE_PAGE_HEIGHT_PX)))
     }
     updatePages()
     const t = window.setTimeout(updatePages, 120)
     return () => window.clearTimeout(t)
-  }, [selected, previewAuthor, activeLayout, editorOpen, inlineHtml])
+  }, [selected, previewAuthor, activeLayout, editorOpen, inlineHtml, PRINTABLE_PAGE_HEIGHT_PX])
 
   useEffect(() => {
     if (!selected || !previewAuthor) return
@@ -1489,6 +1495,22 @@ export default function App() {
     setPromptChatById(prev => ({ ...prev, [selectedId]: [] }))
   }
 
+  function applyBottomSafeZoneBreaks(root: HTMLElement) {
+    const pageContentHeightPx = PRINTABLE_PAGE_HEIGHT_PX
+    // Allow using the page end when 3-4 lines can still fit.
+    const minUsableLinesPx = 56
+    const blockSelectors = ['.resume-experience-item', '.resume-project-item']
+    const blocks = root.querySelectorAll<HTMLElement>(blockSelectors.join(','))
+    blocks.forEach((block) => {
+      const startInPage = block.offsetTop % pageContentHeightPx
+      const remainingSpacePx = pageContentHeightPx - startInPage
+      if (remainingSpacePx < minUsableLinesPx) {
+        block.style.breakBefore = 'page'
+        ;(block.style as CSSStyleDeclaration).pageBreakBefore = 'always'
+      }
+    })
+  }
+
   async function exportPdf() {
     if (!renderAuthor) return
     const errs = validateResumeForExport(renderAuthor)
@@ -1499,8 +1521,11 @@ export default function App() {
     }
     setExportErrors([])
 
-    // Prefer on-screen preview (includes live editor / inline HTML); measure clone is for layout math only.
+    const hasInlineEdits = Boolean(selected && inlineHtmlById[selected.id])
     const shell =
+      (hasInlineEdits
+        ? (previewRef.current?.querySelector('#resume-document-template') as HTMLElement | null)
+        : (measureRef.current?.querySelector('#resume-document-template') as HTMLElement | null)) ??
       (previewRef.current?.querySelector('#resume-document-template') as HTMLElement | null) ??
       (measureRef.current?.querySelector('#resume-document-template') as HTMLElement | null)
     if (!shell) return
@@ -1513,45 +1538,50 @@ export default function App() {
         .replace(/\s+/g, '_')
         .slice(0, 120) || 'Resume'
 
-    previewRef.current?.scrollTo({ top: 0 })
-
     setPdfExporting(true)
     const host = document.createElement('div')
     host.setAttribute('aria-hidden', 'true')
-    host.style.cssText = `position:fixed;left:0;top:0;width:${A4_WIDTH_PX}px;max-width:100vw;opacity:0;pointer-events:none;z-index:-1;overflow:hidden`
+    host.style.cssText = `position:fixed;left:-99999px;top:0;width:${A4_WIDTH_PX}px;opacity:0;pointer-events:none;z-index:-1;overflow:hidden`
     const capture = shell.cloneNode(true) as HTMLElement
+    // Enforce visible breathing space in downloaded PDF pages.
+    capture.style.boxSizing = 'border-box'
+    capture.style.paddingTop = `${PRINT_TOP_MARGIN_MM}mm`
+    capture.style.paddingBottom = `${PRINT_BOTTOM_SAFE_ZONE_MM}mm`
     host.appendChild(capture)
     document.body.appendChild(host)
 
     try {
       await document.fonts?.ready
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+      void capture.offsetHeight
+      applyBottomSafeZoneBreaks(capture)
 
-      // Clone into an off-screen host — same DOM as preview (WYSIWYG); on-screen preview is never mutated.
       const { default: html2pdf } = await import('html2pdf.js')
       const widthPx = Math.max(capture.scrollWidth, capture.clientWidth)
+      const highQualityScale = Math.min(4, Math.max(3, window.devicePixelRatio * 2))
 
       await html2pdf()
         .set({
-          margin: 0,
+          margin: [PRINT_TOP_MARGIN_MM, 0, PRINT_BOTTOM_SAFE_ZONE_MM, 0],
           filename: `${safeName}.pdf`,
-          image: { type: 'jpeg', quality: 0.95 },
+          image: { type: 'png', quality: 1 },
           html2canvas: {
-            scale: 2,
+            scale: highQualityScale,
             useCORS: true,
             logging: false,
+            backgroundColor: '#ffffff',
             scrollY: -window.scrollY,
             scrollX: -window.scrollX,
             windowWidth: widthPx,
           },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['css', 'legacy'] },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: false },
+          pagebreak: { mode: ['css'] },
         })
         .from(capture)
         .save()
     } catch (e) {
       console.error(e)
-      alert('Could not build the PDF. Try again, or use your browser print dialog on the preview.')
+      alert('Could not build the PDF. Please try again.')
     } finally {
       document.body.removeChild(host)
       setPdfExporting(false)
@@ -1568,13 +1598,28 @@ export default function App() {
     }
     setExportErrors([])
 
+    // If the user edited inline content, print from live preview first so edits are preserved.
+    // Otherwise prefer measurement tree for stable pagination.
+    const hasInlineEdits = Boolean(selected && inlineHtmlById[selected.id])
     const shell =
+      (hasInlineEdits
+        ? (previewRef.current?.querySelector('#resume-document-template') as HTMLElement | null)
+        : (measureRef.current?.querySelector('#resume-document-template') as HTMLElement | null)) ??
       (previewRef.current?.querySelector('#resume-document-template') as HTMLElement | null) ??
       (measureRef.current?.querySelector('#resume-document-template') as HTMLElement | null)
     if (!shell) return
 
     const capture = shell.cloneNode(true) as HTMLElement
+    const measureHost = document.createElement('div')
+    measureHost.setAttribute('aria-hidden', 'true')
+    measureHost.style.cssText = `position:fixed;left:-99999px;top:0;width:${A4_WIDTH_PX}px;opacity:0;pointer-events:none;z-index:-1;overflow:hidden`
+    document.body.appendChild(measureHost)
+    measureHost.appendChild(capture)
+    // Force layout so offsets are accurate before pagination rewrite.
+    void capture.offsetHeight
+    applyBottomSafeZoneBreaks(capture)
     const resumeHtml = capture.outerHTML
+    document.body.removeChild(measureHost)
 
     const win = window.open('', '_blank')
     if (!win) {
@@ -1598,8 +1643,53 @@ export default function App() {
   <title>${(selected?.result?.name ?? 'Resume').replace(/[<>]/g, '')}</title>
   <style>${allCSS}</style>
   <style>
-    @page { size: A4 portrait; margin: 0; }
-    html, body { margin: 0; padding: 0; background: white; }
+    @page { size: A4 portrait; margin: ${PRINT_TOP_MARGIN_MM}mm 0 ${PRINT_BOTTOM_SAFE_ZONE_MM}mm 0; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: white;
+      width: 210mm;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+    body {
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #resume-document-template {
+      width: 210mm !important;
+      max-width: 210mm !important;
+      margin: 0 auto !important;
+    }
+    /* Prevent large blank gaps by allowing browser print engine to split blocks naturally. */
+    #resume-document-template section,
+    #resume-document-template section > div,
+    #resume-document-template article,
+    #resume-document-template p,
+    #resume-document-template li {
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+    }
+    /* Allow natural splitting; JS pass only moves starts when <3-4 lines fit. */
+    #resume-document-template .resume-experience-item,
+    #resume-document-template .resume-experience-item > div,
+    #resume-document-template .resume-project-item,
+    #resume-document-template .resume-project-item > div,
+    #resume-document-template li {
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+    }
+    #resume-document-template p,
+    #resume-document-template li {
+      orphans: 3;
+      widows: 3;
+    }
+    #resume-document-template .resume-skill-row {
+      margin-bottom: 7px !important;
+    }
+    #resume-document-template .resume-skill-row:last-child {
+      margin-bottom: 0 !important;
+    }
     #resume-document-template, #resume-document-template * {
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
@@ -1609,7 +1699,10 @@ export default function App() {
 <body>${resumeHtml}</body>
 </html>`)
     win.document.close()
+    let hasPrinted = false
     const doPrint = () => {
+      if (hasPrinted) return
+      hasPrinted = true
       win.focus()
       win.print()
     }
@@ -1635,7 +1728,8 @@ export default function App() {
   const emptyBox = D ? 'border-white/[0.06] bg-white/[0.02]' : 'border-slate-200 bg-slate-50'
   const renderAuthor = previewAuthor ?? selected?.result
   const renderResumeNode = (editableMode: boolean, opts?: { forMeasure?: boolean }) => {
-    const sheetMinPx = opts?.forMeasure ? undefined : previewPages * PAGE_HEIGHT_PX
+    // Match print output: do not force preview to stretched page height.
+    const sheetMinPx = undefined
     /* Saved HTML snapshot bypasses React template — only use it in editable canvas mode. */
     if (inlineHtml && editableMode) {
       return (
@@ -1743,7 +1837,7 @@ export default function App() {
               OpenRouter · Claude
             </div>
 
-            {/* Export PDF */}
+            {/* Download PDF */}
             {selected?.status === 'done' && (
               <div className="flex items-center gap-1.5">
                 <button
@@ -1773,7 +1867,7 @@ export default function App() {
                   ) : (
                     <Download className="w-3.5 h-3.5 shrink-0" />
                   )}
-                  {pdfExporting ? 'Building PDF…' : 'Export PDF'}
+                  {pdfExporting ? 'Building PDF…' : 'Download PDF'}
                 </button>
                 <button
                   type="button"
@@ -2482,19 +2576,33 @@ export default function App() {
                   <div className="relative mx-auto box-border w-full border border-slate-200 bg-white" style={{ maxWidth: A4_WIDTH_PX }}>
                     {renderResumeNode(false)}
                     {Array.from({ length: Math.max(0, previewPages - 1) }).map((_, i) => {
-                      const y = (i + 1) * PAGE_HEIGHT_PX
+                      const y = (i + 1) * PRINTABLE_PAGE_HEIGHT_PX
                       return (
-                        <div
-                          key={`page-guide-${i}`}
-                          style={{
-                            position: 'absolute',
-                            left: 0,
-                            right: 0,
-                            top: y,
-                            borderTop: '1px dashed rgba(148,163,184,0.5)',
-                            pointerEvents: 'none',
-                          }}
-                        />
+                        <React.Fragment key={`page-guide-${i}`}>
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: 0,
+                              right: 0,
+                              top: y,
+                              borderTop: '1px dashed rgba(148,163,184,0.6)',
+                              pointerEvents: 'none',
+                            }}
+                          />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: 0,
+                              right: 0,
+                              top: y + 1,
+                              height: PREVIEW_PAGE_GAP_PX,
+                              background: D ? 'rgba(15,23,42,0.16)' : 'rgba(226,232,240,0.5)',
+                              borderTop: '1px solid rgba(148,163,184,0.35)',
+                              borderBottom: '1px solid rgba(148,163,184,0.35)',
+                              pointerEvents: 'none',
+                            }}
+                          />
+                        </React.Fragment>
                       )
                     })}
                   </div>

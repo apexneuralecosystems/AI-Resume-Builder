@@ -103,7 +103,7 @@ FIELD RULES
 1.  education   : One line per degree/qualification using the exact format shown above. Include EVERY degree listed.
 2.  experience  : Include EVERY job. For highlights include ALL bullet points from that role (not just 2).
 3.  projects    : Include ALL projects listed. Do not truncate.
-4.  skills      : Include all skills listed in the resume; prioritize JD-relevant skills first when JD is provided. Level: 85-95 primary, 70-84 proficient, 55-69 familiar.
+4.  skills      : Include ONLY 10-12 skills when the resume contains enough valid skills (never more than 12). Prioritize JD-relevant skills first when JD is provided. If fewer than 10 valid skills exist, include all available and do not invent. Level: 85-95 primary, 70-84 proficient, 55-69 familiar.
 5.  techStack   : 2-4 category blocks, only from resume content.
 6.  interests   : Include all interests listed in the resume interests/hobbies section. Do not invent.
 7.  bio/aboutMe : Derived from the resume summary or from actual experience — never fabricated.
