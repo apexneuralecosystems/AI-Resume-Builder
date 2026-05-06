@@ -221,7 +221,7 @@ function ResumeDiagnosticsPanels({
   )
 }
 
-type MainSectionKey = 'summary' | 'technicalSkills' | 'experience' | 'projects' | 'education' | 'certifications' | 'achievements'
+type MainSectionKey = 'summary' | 'technicalSkills' | 'experience' | 'projects' | 'education' | 'certifications'
 type SidebarSectionKey = 'technicalSkills' | 'interests'
 type SectionScope = 'main' | 'sidebar'
 type LayoutConfig = {
@@ -237,7 +237,7 @@ type CanvasTextBoxesById = Record<string, CanvasTextBox[]>
 type PromptSectionKey = MainSectionKey | SidebarSectionKey | null
 
 const DEFAULT_LAYOUT: LayoutConfig = {
-  main: ['summary', 'experience', 'projects', 'education', 'certifications', 'achievements'],
+  main: ['summary', 'experience', 'projects', 'education', 'certifications'],
   sidebar: ['technicalSkills', 'interests'],
   hidden: [],
 }
@@ -248,7 +248,6 @@ const MAIN_SECTIONS: { key: MainSectionKey; label: string }[] = [
   { key: 'projects', label: 'Projects' },
   { key: 'education', label: 'Education' },
   { key: 'certifications', label: 'Certifications' },
-  { key: 'achievements', label: 'Achievements' },
 ]
 
 const SIDEBAR_SECTIONS: { key: SidebarSectionKey; label: string }[] = [
@@ -336,7 +335,7 @@ function mapPromptSectionKey(raw: string): PromptSectionKey {
   if (k.includes('technical skill')) return 'technicalSkills'
   if (k.includes('skill')) return 'technicalSkills'
   if (k.includes('interest') || k.includes('hobby')) return 'interests'
-  if (k.includes('supplement') || k.includes('source') || k.includes('achievement')) return 'achievements'
+  if (k.includes('supplement') || k.includes('source') || k.includes('achievement')) return null
   return null
 }
 

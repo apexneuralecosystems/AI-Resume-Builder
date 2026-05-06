@@ -1,9 +1,9 @@
 import React from 'react'
 import { Award, SquarePen, ChevronUp, ChevronDown, Trash2, GripVertical } from 'lucide-react'
 import { Author, CaseStudy as CaseStudyType } from '../types'
-import logoImg from '../img/black-logo.png'
+import logoImg from '../img/red.png'
 
-type MainSectionKey = 'summary' | 'technicalSkills' | 'experience' | 'projects' | 'education' | 'certifications' | 'achievements'
+type MainSectionKey = 'summary' | 'technicalSkills' | 'experience' | 'projects' | 'education' | 'certifications'
 type SidebarSectionKey = 'technicalSkills' | 'interests'
 
 interface ResumeLayoutConfig {
@@ -297,9 +297,8 @@ export function ResumeTemplate({
   // ── Certifications ───────────────────────────────────────────────────────
   const certs = author.certifications ?? []
 
-  const supplementSections = author.sectionIntegrity?.supplementSections ?? []
   const hidden = new Set(layoutConfig?.hidden ?? [])
-  const mainOrder: MainSectionKey[] = layoutConfig?.main ?? ['technicalSkills', 'experience', 'projects', 'education', 'certifications', 'achievements', 'summary']
+  const mainOrder: MainSectionKey[] = layoutConfig?.main ?? ['technicalSkills', 'experience', 'projects', 'education', 'certifications', 'summary']
   const sidebarOrder: SidebarSectionKey[] = layoutConfig?.sidebar ?? ['technicalSkills', 'interests']
   const orderOf = <T extends string>(key: T, order: T[], fallback: number) => {
     const i = order.indexOf(key)
@@ -822,34 +821,6 @@ export function ResumeTemplate({
             )}
 
             {/* Verbatim fallback blocks when structured JSON missed a detected source section */}
-            {false && !isHidden('achievements') && supplementSections.map((sup, idx) => (
-              <section
-                key={`sup-${idx}-${sup.title}`}
-                className={`${sectionBlock} rounded-md border border-amber-200/80 bg-amber-50/40 px-2 py-1.5 -mx-1 group relative ${editable ? 'cursor-move' : ''} ${sectionDropClass('main', 'achievements')}`}
-                style={mainOrderStyle('achievements', 6)}
-                draggable={editable}
-                onDragStart={(e) => {
-                  if (!editable) return
-                  e.dataTransfer.effectAllowed = 'move'
-                  onSectionDragStart?.('main', 'achievements')
-                }}
-                onDragOver={(e) => { if (!editable) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; onSectionDragOver?.('main', 'achievements') }}
-                onDragEnd={() => onSectionDragEnd?.()}
-                onDrop={(e) => { e.preventDefault(); onSectionDrop?.('main', 'achievements') }}
-              >
-                {sectionTools('main', 'achievements')}
-                <div className={sectionTitle}>{idx === 0 ? 'Achievements' : sup.title}</div>
-                <p className="text-[10px] text-amber-800/90 mb-1 font-medium italic">
-                  Source excerpt (included so nothing from your file is omitted)
-                </p>
-                <div
-                  className={`${bodyText}`}
-                  style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.45 }}
-                >
-                  {sup.body}
-                </div>
-              </section>
-            ))}
 
             {/* Certifications — only if they exist */}
             {false && !isHidden('certifications') && certs.length > 0 && (
@@ -1063,30 +1034,6 @@ export function ResumeTemplate({
           </section>
         )}
 
-        {!isHidden('achievements') && supplementSections.map((sup, idx) => (
-          <section
-            key={`sup-bottom-${idx}-${sup.title}`}
-            className={`w-full px-4 pb-2.5 ${sectionBlock} rounded-md border border-amber-200/80 bg-amber-50/40 group relative ${editable ? 'cursor-move' : ''} ${sectionDropClass('main', 'achievements')}`}
-            draggable={editable}
-            onDragStart={(e) => {
-              if (!editable) return
-              e.dataTransfer.effectAllowed = 'move'
-              onSectionDragStart?.('main', 'achievements')
-            }}
-            onDragOver={(e) => { if (!editable) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; onSectionDragOver?.('main', 'achievements') }}
-            onDragEnd={() => onSectionDragEnd?.()}
-            onDrop={(e) => { e.preventDefault(); onSectionDrop?.('main', 'achievements') }}
-          >
-            {sectionTools('main', 'achievements')}
-            <div className={sectionTitle}>{idx === 0 ? 'Achievements' : sup.title}</div>
-            <div
-              className={bodyText}
-              style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.45 }}
-            >
-              {sup.body}
-            </div>
-          </section>
-        ))}
       </div>
     </div>
   )

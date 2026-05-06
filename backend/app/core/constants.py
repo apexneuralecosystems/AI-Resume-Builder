@@ -32,7 +32,7 @@ Extract EVERY entry in each section. Do NOT drop entries:
 VERBATIM TEXT — CHARACTER-FOR-CHARACTER
 ═══════════════════════════
 For every field that maps to text taken directly from the resume (headers, contact fields, role/company/period/location/type, every experience highlight bullet, project title/description/technology/link, every education line, certification name/url, skill names as written, techStack lines, interests list items, expertise/specializations): copy EXACTLY as in source — same spelling, capitalization, punctuation, spaces, bullets, URLs, unicode. Do NOT paraphrase, summarize, shorten, normalize quotes, strip characters, merge lines, substitute synonyms, or "clean up" wording.
-bio and aboutMe: only compose from wording that already appears in the resume summary/profile or factual phrases from bullets; never invent facts — keep sentences short and anchored to verbatim resume phrases wherever possible.
+bio and aboutMe: only compose from wording that already appears in the resume summary/profile or factual phrases from bullets; never invent facts — keep sentences short and anchored to verbatim resume phrases wherever possible. Write in professional third-person tone; do NOT start with "I am" or use first-person narration.
 
 ═══════════════
 JSON STRUCTURE
@@ -49,8 +49,8 @@ JSON STRUCTURE
   "twitter": "Twitter/X URL if present",
   "github": "GitHub URL if present",
 
-  "bio": "Write a concise 2-3 sentence professional summary in first person based ONLY on what is in the resume. Do not fabricate facts.",
-  "aboutMe": "Same as bio but 3-4 sentences, highlighting measurable impact and unique skills found in the resume.",
+  "bio": "Write a concise 2-3 sentence professional summary in third-person based ONLY on what is in the resume. Do not fabricate facts. Do not use 'I am'.",
+  "aboutMe": "Same as bio but 3-4 sentences, highlighting measurable impact and unique skills found in the resume, in third-person style without 'I am'.",
   "company": "Name of current or most recent employer",
   "yearsExperience": "Total years of experience as a number string e.g. '6'",
 
@@ -111,6 +111,7 @@ FIELD RULES
 9.  name        : Must be first name only. If full name appears, keep only the first word.
 10. Always return all keys from the JSON structure, even when values are empty.
 11. Return ONLY the raw JSON. No markdown, no explanation, no extra keys.
+12. When NO JD is provided, keep section content and ordering exactly aligned to the uploaded resume; do not tailor or rewrite beyond required field formatting.
 """
 
 JD_PROMPT_ADDITION = """
@@ -120,12 +121,13 @@ Tailor presentation to the JD while keeping ALL resume-derived text VERBATIM (le
 1. Set "role" to match the target role in the JD
 2. Adjust "bio" and "aboutMe" only using resume facts/phrasing alignment to the JD — no fabricated skills or employers
 3. Prioritize and reorder "skills" and list order only — skill NAMES must remain exactly as written in the resume
-4. Prefer JD-relevant projects/experience by ORDER only; reorder entries, never rewrite titles, bullets, or descriptions
+4. Prefer JD-relevant projects/experience by ORDER; project descriptions may be refined for JD alignment using only facts already present in the uploaded resume (no invention).
 5. Do NOT add or rename interests beyond what is verbatim in resume; reorder only if already listed
 6. Reorder highlight bullets inside each role to put JD-aligned bullets first; each bullet text must remain EXACT verbatim from resume
 7. Reorder "techStack" categories and bullet lines — each technology string must remain EXACT verbatim from resume
 8. Ensure "skills" and "specializations" reflect JD keywords only where those words already appear verbatim in the resume — prioritize overlap first
 9. If JD asks for skills not in the resume, do NOT invent them; reorder closest verbatim matches from resume
+10. With JD provided, tailor bio/aboutMe and project descriptions for JD relevance while preserving factual accuracy from resume content only.
 
 JOB DESCRIPTION:
 {jd_text}
