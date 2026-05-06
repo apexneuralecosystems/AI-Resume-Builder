@@ -4,7 +4,7 @@ import { Author, CaseStudy as CaseStudyType } from '../types'
 import logoImg from '../img/red.png'
 
 type MainSectionKey = 'summary' | 'technicalSkills' | 'experience' | 'projects' | 'education' | 'certifications'
-type SidebarSectionKey = 'technicalSkills' | 'interests'
+type SidebarSectionKey = 'technicalSkills' | 'languages' | 'interests'
 
 interface ResumeLayoutConfig {
   main?: MainSectionKey[]
@@ -57,6 +57,16 @@ function parseTechStackBlocks(raw: string | undefined): { title: string; tags: s
     if (title || trimmedTags.length > 0) blocks.push({ title, tags: trimmedTags })
   }
   return blocks
+}
+
+function normalizeDisplayText(value: string | undefined): string {
+  if (!value) return ''
+  return value
+    .replace(/\r\n?/g, '\n')
+    .replace(/\f/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 function parseEducationLine(line: string): {
@@ -165,8 +175,8 @@ function collectTechBlockTagsLower(blocks: { tags: string[] }[]): Set<string> {
 const avoidBreak      = ''
 const sectionBlock    = 'w-full mt-[6px]'
 const noBreak: React.CSSProperties = { breakInside: 'auto', pageBreakInside: 'auto' }
-const sectionTitle    = 'block w-full text-[16px] font-bold tracking-[0.08em] uppercase text-primary border-b-2 border-slate-300 pb-0.5 mb-1.5 text-left'
-const bodyText        = 'text-[12px] text-slate-800 leading-snug'
+const sectionTitle    = 'block w-full text-[19px] font-bold tracking-[0.08em] uppercase text-primary border-b-2 border-slate-300 pb-0.5 mb-1.5 text-left'
+const bodyText        = 'text-[15px] text-slate-800 leading-snug'
 const A4_WIDTH_MM = 210
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -205,7 +215,7 @@ export function ResumeTemplate({
   onDeleteExperienceLine?: (expIndex: number, lineIndex: number) => void
   onDeleteProject?: (projectIndex: number) => void
 }) {
-  const bio        = (author.aboutMe ?? author.bio ?? '').trim()
+  const bio        = normalizeDisplayText(author.aboutMe ?? author.bio ?? '')
   const techBlocks = parseTechStackBlocks(author.techStack)
 
   // ── Projects (right column) ──────────────────────────────────────────────
@@ -282,12 +292,29 @@ export function ResumeTemplate({
   }
   const overflowTechBlock =
     overflowTags.length > 0
-      ? [{ title: 'Additional Skills', tags: overflowTags }]
+      ? [{ title: 'Tools & Technologies', tags: overflowTags }]
       : []
   const techBlocksMerged = [...techBlocksForDisplay, ...overflowTechBlock]
 
   // ── Interests (sidebar) ──────────────────────────────────────────────────
   const interests = (author.interests ?? []).filter(Boolean)
+  const rawLanguagesFromAuthor = ((author as any).languages ?? []) as unknown[]
+  const languagesFromAuthor = rawLanguagesFromAuthor
+    .map(item => String(item ?? '').trim())
+    .filter(Boolean)
+  const languageSupplement = (author.sectionIntegrity?.supplementSections ?? [])
+    .find(section => (section?.title ?? '').trim().toLowerCase() === 'languages')
+  const languagesFromSupplement = (languageSupplement?.body ?? '')
+    .split(/\n|,|•|·|;/)
+    .map(item => item.trim())
+    .filter(Boolean)
+  const languageSeen = new Set<string>()
+  const languages = [...languagesFromAuthor, ...languagesFromSupplement].filter(item => {
+    const key = item.toLowerCase()
+    if (!key || languageSeen.has(key)) return false
+    languageSeen.add(key)
+    return true
+  })
 
   // ── Education ────────────────────────────────────────────────────────────
   const educationNode = author.education?.trim()
@@ -296,10 +323,18 @@ export function ResumeTemplate({
 
   // ── Certifications ───────────────────────────────────────────────────────
   const certs = author.certifications ?? []
+  const supplementSections = (author.sectionIntegrity?.supplementSections ?? [])
+    .filter(section => (section?.title ?? '').trim().toLowerCase() !== 'languages')
+    .map(section => ({
+      title: (section?.title ?? '').trim(),
+      // Normalize raw extractor spacing so pre-wrap does not create near-empty pages.
+      body: normalizeDisplayText(section?.body ?? ''),
+    }))
+    .filter(section => section.title && section.body)
 
   const hidden = new Set(layoutConfig?.hidden ?? [])
   const mainOrder: MainSectionKey[] = layoutConfig?.main ?? ['technicalSkills', 'experience', 'projects', 'education', 'certifications', 'summary']
-  const sidebarOrder: SidebarSectionKey[] = layoutConfig?.sidebar ?? ['technicalSkills', 'interests']
+  const sidebarOrder: SidebarSectionKey[] = layoutConfig?.sidebar ?? ['technicalSkills', 'languages', 'interests']
   const orderOf = <T extends string>(key: T, order: T[], fallback: number) => {
     const i = order.indexOf(key)
     return i >= 0 ? i : fallback
@@ -356,12 +391,12 @@ export function ResumeTemplate({
         maxWidth: `${A4_WIDTH_MM}mm`,
         boxSizing: 'border-box',
         fontFamily: "'Times New Roman', Times, serif",
-        fontSize: '12pt',
+        fontSize: '14pt',
       }
     : {
         width: `${A4_WIDTH_MM}mm`,
         fontFamily: "'Times New Roman', Times, serif",
-        fontSize: '12pt',
+        fontSize: '14pt',
       }
 
   const printableStyle: React.CSSProperties = {
@@ -394,7 +429,10 @@ export function ResumeTemplate({
           >
 
             {/* Logo / Avatar block */}
-            <div className={`w-full ${avoidBreak}`} style={{ maxWidth: 220 }}>
+            <div
+              className={`w-full ${avoidBreak}`}
+              style={{ maxWidth: 220, marginLeft: 'auto', marginRight: 'auto', paddingLeft: 34 }}
+            >
               <div className="grid gap-2 w-full" style={{ gridTemplateColumns: author.avatar ? '1fr 1fr' : '132px' }}>
                 {author.avatar && (
                   <div className="w-full aspect-square rounded-[12px] overflow-hidden bg-gray-200 border border-gray-100 shadow-sm">
@@ -549,10 +587,44 @@ export function ResumeTemplate({
             )}
 
             {/* Interests — only if they exist */}
+            {languages.length > 0 && (
+              <div
+                className={`${sectionBlock} group relative ${editable ? 'cursor-move' : ''} ${sectionDropClass('sidebar', 'languages')}`}
+                style={sideOrderStyle('languages', 1)}
+                draggable={editable}
+                onDragStart={(e) => {
+                  if (!editable) return
+                  e.dataTransfer.effectAllowed = 'move'
+                  onSectionDragStart?.('sidebar', 'languages')
+                }}
+                onDragOver={(e) => { if (!editable) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; onSectionDragOver?.('sidebar', 'languages') }}
+                onDragEnd={() => onSectionDragEnd?.()}
+                onDrop={(e) => { e.preventDefault(); onSectionDrop?.('sidebar', 'languages') }}
+              >
+                {sectionTools('sidebar', 'languages')}
+                <div className={sectionTitle}>Languages</div>
+                <div
+                  className="w-full rounded-md border border-slate-200 bg-slate-50/50 p-1.5 mt-1.5"
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}
+                >
+                  {languages.map((lang, idx) => (
+                    <div
+                      key={`lang-${idx}`}
+                      className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium leading-snug text-slate-700"
+                      style={{ wordBreak: 'break-word' }}
+                    >
+                      {lang}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Interests — only if they exist */}
             {!isHidden('interests') && interests.length > 0 && (
               <div
                 className={`${sectionBlock} group relative ${editable ? 'cursor-move' : ''} ${sectionDropClass('sidebar', 'interests')}`}
-                style={sideOrderStyle('interests', 1)}
+                style={sideOrderStyle('interests', 2)}
                 draggable={editable}
                 onDragStart={(e) => {
                   if (!editable) return
@@ -716,9 +788,9 @@ export function ResumeTemplate({
                       key={i}
                       className="resume-experience-item pb-[4px] mb-[4px] border-b border-gray-100 last:border-b-0 last:pb-0 last:mb-0"
                     >
-                      <div className="resume-experience-lead" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                      <div className="resume-experience-lead" style={{ breakInside: 'auto', pageBreakInside: 'auto' }}>
                         <div className={avoidBreak} style={noBreak}>
-                        <div className="text-[12px] font-bold text-slate-900 leading-tight">
+                        <div className="resume-experience-heading text-[12px] font-bold text-slate-900 leading-tight">
                             {exp.role}
                           </div>
 
@@ -744,13 +816,18 @@ export function ResumeTemplate({
                         {(exp.highlights ?? []).length > 0 && (
                           <div className="mt-[4px] flex flex-col gap-[2px]">
                             {(exp.highlights ?? []).slice(0, 3).map((h, j) => (
-                              <div key={j} className="flex items-start group/line">
+                              <div key={j} className="resume-experience-bullet flex items-start group/line">
                                 <span
                                   className="text-primary shrink-0 leading-none mr-[5px] mt-[2px]"
                                   style={{ fontSize: 9 }}
                                   aria-hidden
                                 >▸</span>
-                                <span className="text-[11px] text-slate-800 leading-[1.45]" style={{ whiteSpace: 'pre-wrap' }}>{h}</span>
+                                <span
+                                  className="text-[12px] text-slate-800 leading-[1.45]"
+                                  style={{ whiteSpace: 'pre-wrap', fontFamily: "'DM Sans', sans-serif" }}
+                                >
+                                  {normalizeDisplayText(h)}
+                                </span>
                                 {editable && (
                                   <button
                                     type="button"
@@ -771,13 +848,18 @@ export function ResumeTemplate({
                       {(exp.highlights ?? []).length > 3 && (
                         <div className="mt-[4px] flex flex-col gap-[2px]">
                           {(exp.highlights ?? []).slice(3).map((h, j) => (
-                            <div key={j} className="flex items-start group/line">
+                            <div key={j} className="resume-experience-bullet flex items-start group/line">
                               <span
                                 className="text-primary shrink-0 leading-none mr-[5px] mt-[2px]"
                                 style={{ fontSize: 9 }}
                                 aria-hidden
                               >▸</span>
-                              <span className="text-[11px] text-slate-800 leading-[1.45]" style={{ whiteSpace: 'pre-wrap' }}>{h}</span>
+                              <span
+                                className="text-[12px] text-slate-800 leading-[1.45]"
+                                style={{ whiteSpace: 'pre-wrap', fontFamily: "'DM Sans', sans-serif" }}
+                              >
+                                {normalizeDisplayText(h)}
+                              </span>
                               {editable && (
                                 <button
                                   type="button"
@@ -943,7 +1025,7 @@ export function ResumeTemplate({
                           className="text-[11px] text-slate-800 leading-[1.4]"
                           style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', textIndent: 0, marginLeft: 0, paddingLeft: 0 }}
                         >
-                          {p.technology}
+                          {normalizeDisplayText(p.technology)}
                         </div>
                       </div>
                     )}
@@ -954,7 +1036,7 @@ export function ResumeTemplate({
                       className="text-[11px] text-slate-800 mt-[3px] leading-[1.45]"
                       style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', textIndent: 0, marginLeft: 0, paddingLeft: 0 }}
                     >
-                      {p.description}
+                      {normalizeDisplayText(p.description)}
                     </div>
                   )}
                 </div>
@@ -1031,6 +1113,26 @@ export function ResumeTemplate({
                 )
               })}
             </div>
+          </section>
+        )}
+
+        {/* Source fallback sections: render any source-only content that was not mapped into structured JSON. */}
+        {supplementSections.length > 0 && (
+          <section className="w-full px-4 pb-2.5 mt-[6px]">
+            {supplementSections.map((section, idx) => (
+              <div
+                key={`supplement-${idx}`}
+                className="resume-supplement-item mb-[6px] last:mb-0 pb-[4px] border-b border-gray-100 last:border-b-0"
+              >
+                <div className={sectionTitle}>{section.title}</div>
+                <div
+                  className="text-[12px] text-slate-800 leading-[1.5]"
+                  style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "'DM Sans', sans-serif" }}
+                >
+                  {section.body}
+                </div>
+              </div>
+            ))}
           </section>
         )}
 

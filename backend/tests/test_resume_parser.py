@@ -23,6 +23,31 @@ class FakeLlmClient:
         return {"name": "Praveen", "skills": [{"name": "FastAPI", "level": 90}]}
 
 
+class MissingHighlightsLlmClient:
+    async def parse_to_json(self, system_prompt: str, user_content: str) -> dict:
+        return {
+            "name": "Praveen",
+            "experience": [
+                {
+                    "role": "Azure Data Engineer",
+                    "company": "Nayagara Technologies Pvt ltd",
+                    "period": "Jan 2021 to Till date",
+                    "type": "Full-time",
+                    "highlights": [
+                        "Developed pipelines in azure data factory to fetch data from different sources"
+                    ],
+                },
+                {
+                    "role": "Operations Associate",
+                    "company": "My Ally (Acquired by Phenom)",
+                    "period": "Oct 2016 to Sep 2019",
+                    "type": "Full-time",
+                    "highlights": [],
+                },
+            ],
+        }
+
+
 def _make_settings() -> Settings:
     return Settings(
         app_name="Resume Builder API",
@@ -76,3 +101,38 @@ def test_parse_resume_includes_jd_when_provided() -> None:
     assert JD_PROMPT_ADDITION.split("{jd_text}")[0].strip() in client.last_system_prompt
     assert "Target job description for tailoring:" in client.last_user_content
     assert "FastAPI and Docker production skills" in client.last_user_content
+
+
+def test_parse_resume_recovers_missing_highlights_from_verbatim_text() -> None:
+    settings = _make_settings()
+    client = MissingHighlightsLlmClient()
+    resume_text = """Azure Data Engineer
+Nayagara Technologies Pvt ltd
+Jan 2021 to Till date
+Full-time
+Developed pipelines in azure data factory to fetch data from different sources
+Operations Associate
+My Ally (Acquired by Phenom)
+Oct 2016 to Sep 2019
+Full-time
+Provided production support by troubleshooting SQL-related issues
+Collaborated closely with business analysts and stakeholders
+"""
+    resume = UploadFile(filename="resume.txt", file=BytesIO(resume_text.encode("utf-8")))
+
+    result = asyncio.run(
+        parse_resume_payload(
+            resume=resume,
+            jd=None,
+            settings=settings,
+            llm_client=client,
+        )
+    )
+
+    experience = result["experience"]
+    assert len(experience) >= 2
+    ops_role = next((e for e in experience if e["role"] == "Operations Associate"), None)
+    assert ops_role is not None
+    assert isinstance(ops_role["highlights"], list)
+    assert len(ops_role["highlights"]) >= 1
+    assert any("troubleshooting SQL-related issues" in h for h in ops_role["highlights"])

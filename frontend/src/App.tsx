@@ -222,7 +222,7 @@ function ResumeDiagnosticsPanels({
 }
 
 type MainSectionKey = 'summary' | 'technicalSkills' | 'experience' | 'projects' | 'education' | 'certifications'
-type SidebarSectionKey = 'technicalSkills' | 'interests'
+type SidebarSectionKey = 'technicalSkills' | 'languages' | 'interests'
 type SectionScope = 'main' | 'sidebar'
 type LayoutConfig = {
   main: MainSectionKey[]
@@ -238,7 +238,7 @@ type PromptSectionKey = MainSectionKey | SidebarSectionKey | null
 
 const DEFAULT_LAYOUT: LayoutConfig = {
   main: ['summary', 'experience', 'projects', 'education', 'certifications'],
-  sidebar: ['technicalSkills', 'interests'],
+  sidebar: ['technicalSkills', 'languages', 'interests'],
   hidden: [],
 }
 
@@ -252,6 +252,7 @@ const MAIN_SECTIONS: { key: MainSectionKey; label: string }[] = [
 
 const SIDEBAR_SECTIONS: { key: SidebarSectionKey; label: string }[] = [
   { key: 'technicalSkills', label: 'Technical Skills' },
+  { key: 'languages', label: 'Languages' },
   { key: 'interests', label: 'Interests' },
 ]
 
@@ -334,6 +335,7 @@ function mapPromptSectionKey(raw: string): PromptSectionKey {
   if (k.includes('cert')) return 'certifications'
   if (k.includes('technical skill')) return 'technicalSkills'
   if (k.includes('skill')) return 'technicalSkills'
+  if (k.includes('language')) return 'languages'
   if (k.includes('interest') || k.includes('hobby')) return 'interests'
   if (k.includes('supplement') || k.includes('source') || k.includes('achievement')) return null
   return null
@@ -414,8 +416,8 @@ export default function App() {
   const A4_WIDTH_PX = Math.round(210 * MM_TO_PX)
   const PAGE_HEIGHT_PX = Math.round(297 * MM_TO_PX)
   const PREVIEW_PAGE_GAP_PX = 14
-  const PRINT_TOP_MARGIN_MM = 5
-  const PRINT_BOTTOM_SAFE_ZONE_MM = 5
+  const PRINT_TOP_MARGIN_MM = 6
+  const PRINT_BOTTOM_SAFE_ZONE_MM = 6
   const PRINTABLE_PAGE_HEIGHT_PX = Math.round((297 - PRINT_TOP_MARGIN_MM - PRINT_BOTTOM_SAFE_ZONE_MM) * MM_TO_PX)
   const canUndo = Boolean(selected && (historyById[selected.id]?.past.length ?? 0) > 0)
   const canRedo = Boolean(selected && (historyById[selected.id]?.future.length ?? 0) > 0)
@@ -635,6 +637,10 @@ export default function App() {
       return
     }
     const updatePages = () => {
+      const measureShell = measureRef.current?.querySelector('#resume-document-template') as HTMLElement | null
+      if (measureShell) keepExperienceHeadingWithContent(measureShell)
+      const previewShell = previewRef.current?.querySelector('#resume-document-template') as HTMLElement | null
+      if (previewShell) keepExperienceHeadingWithContent(previewShell)
       const el = measureRef.current?.querySelector('#resume-printable-area') as HTMLElement | null
       const h = el?.scrollHeight ?? PAGE_HEIGHT_PX
       // Match print preview pagination by using printable content height
@@ -1497,10 +1503,11 @@ export default function App() {
   function applyBottomSafeZoneBreaks(root: HTMLElement) {
     const pageContentHeightPx = PRINTABLE_PAGE_HEIGHT_PX
     // Allow using the page end when 3-4 lines can still fit.
-    const minUsableLinesPx = 56
+    const minUsableLinesPx = 40
     const blockSelectors = ['.resume-experience-item', '.resume-project-item']
     const blocks = root.querySelectorAll<HTMLElement>(blockSelectors.join(','))
     blocks.forEach((block) => {
+      if (block.offsetHeight >= pageContentHeightPx * 0.7) return
       const startInPage = block.offsetTop % pageContentHeightPx
       const remainingSpacePx = pageContentHeightPx - startInPage
       if (remainingSpacePx < minUsableLinesPx) {
@@ -1508,6 +1515,91 @@ export default function App() {
         ;(block.style as CSSStyleDeclaration).pageBreakBefore = 'always'
       }
     })
+  }
+
+  function keepExperienceHeadingWithContent(root: HTMLElement) {
+    const pageContentHeightPx = PRINTABLE_PAGE_HEIGHT_PX
+    const expBlocks = root.querySelectorAll<HTMLElement>('.resume-experience-item')
+    expBlocks.forEach((block) => {
+      block.style.breakBefore = 'auto'
+      ;(block.style as CSSStyleDeclaration).pageBreakBefore = 'auto'
+
+      const heading = block.querySelector<HTMLElement>('.resume-experience-heading')
+      if (!heading) return
+
+      const blockStart = block.offsetTop % pageContentHeightPx
+      const remainingPx = pageContentHeightPx - blockStart
+
+      const firstBullet = block.querySelector<HTMLElement>('.resume-experience-bullet')
+      const headingHeight = Math.max(heading.offsetHeight || 0, 18)
+      const bulletHeight = Math.max(firstBullet?.offsetHeight || 0, 20)
+      const requiredPx = headingHeight + bulletHeight + 10
+
+      if (remainingPx < requiredPx) {
+        block.style.breakBefore = 'page'
+        ;(block.style as CSSStyleDeclaration).pageBreakBefore = 'always'
+      }
+    })
+  }
+
+  function normalizePrintWhitespace(root: HTMLElement) {
+    // Collapse excessive line breaks that often come from PDF/DOC extraction artifacts.
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    const textNodes: Text[] = []
+    let node = walker.nextNode()
+    while (node) {
+      if (node.nodeType === Node.TEXT_NODE) textNodes.push(node as Text)
+      node = walker.nextNode()
+    }
+    textNodes.forEach((textNode) => {
+      const value = textNode.nodeValue ?? ''
+      const normalized = value
+        .replace(/\r\n?/g, '\n')
+        .replace(/\f/g, '\n')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+      if (normalized !== value) textNode.nodeValue = normalized
+    })
+  }
+
+  function hasMeaningfulText(el: HTMLElement): boolean {
+    return (el.innerText ?? '').replace(/\s+/g, ' ').trim().length > 0
+  }
+
+  function trimTrailingEmptyPrintSpace(root: HTMLElement) {
+    const printable = (root.querySelector('#resume-printable-area') as HTMLElement | null) ?? root
+    const removableSelectors = [
+      '.resume-supplement-item',
+      '.resume-project-item',
+      '.resume-experience-item',
+      'section',
+      'hr',
+      'br',
+    ]
+
+    const getRemainderPx = () => printable.scrollHeight % PRINTABLE_PAGE_HEIGHT_PX
+
+    // If the final page is mostly empty, remove trailing empty-ish blocks first.
+    for (let i = 0; i < 40; i++) {
+      const remainderPx = getRemainderPx()
+      const nearEmptyTail = remainderPx > 0 && remainderPx < 120
+      if (!nearEmptyTail) break
+
+      const nodes = printable.querySelectorAll<HTMLElement>(removableSelectors.join(','))
+      let removed = false
+      for (let idx = nodes.length - 1; idx >= 0; idx--) {
+        const el = nodes[idx]
+        if (!el || !el.parentElement) continue
+        const isSelfClosingSpacer = el.tagName === 'HR' || el.tagName === 'BR'
+        const emptyBlock = !hasMeaningfulText(el) && el.querySelector('img,svg,canvas') === null
+        if (isSelfClosingSpacer || emptyBlock) {
+          el.remove()
+          removed = true
+          break
+        }
+      }
+      if (!removed) break
+    }
   }
 
   async function exportPdf() {
@@ -1553,6 +1645,9 @@ export default function App() {
       await document.fonts?.ready
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
       void capture.offsetHeight
+      normalizePrintWhitespace(capture)
+      trimTrailingEmptyPrintSpace(capture)
+      keepExperienceHeadingWithContent(capture)
       applyBottomSafeZoneBreaks(capture)
 
       const { default: html2pdf } = await import('html2pdf.js')
@@ -1612,9 +1707,11 @@ export default function App() {
     measureHost.style.cssText = `position:fixed;left:-99999px;top:0;width:${A4_WIDTH_PX}px;opacity:0;pointer-events:none;z-index:-1;overflow:hidden`
     document.body.appendChild(measureHost)
     measureHost.appendChild(capture)
-    // Force layout so offsets are accurate before pagination rewrite.
+    // Force layout before cloning print HTML.
     void capture.offsetHeight
-    applyBottomSafeZoneBreaks(capture)
+    normalizePrintWhitespace(capture)
+    trimTrailingEmptyPrintSpace(capture)
+    keepExperienceHeadingWithContent(capture)
     const resumeHtml = capture.outerHTML
     document.body.removeChild(measureHost)
 
@@ -1657,6 +1754,12 @@ export default function App() {
       width: 210mm !important;
       max-width: 210mm !important;
       margin: 0 auto !important;
+      padding: 0 !important;
+      overflow: visible !important;
+    }
+    #resume-printable-area {
+      min-height: auto !important;
+      height: auto !important;
     }
     /* Prevent large blank gaps by allowing browser print engine to split blocks naturally. */
     #resume-document-template section,
@@ -1678,14 +1781,21 @@ export default function App() {
     }
     #resume-document-template p,
     #resume-document-template li {
-      orphans: 3;
-      widows: 3;
+      orphans: 1;
+      widows: 1;
     }
     #resume-document-template .resume-skill-row {
       margin-bottom: 7px !important;
     }
     #resume-document-template .resume-skill-row:last-child {
       margin-bottom: 0 !important;
+    }
+    #resume-document-template section:last-of-type,
+    #resume-document-template .resume-project-item:last-child,
+    #resume-document-template .resume-experience-item:last-child {
+      margin-bottom: 0 !important;
+      padding-bottom: 0 !important;
+      border-bottom: 0 !important;
     }
     #resume-document-template, #resume-document-template * {
       -webkit-print-color-adjust: exact !important;
@@ -2306,6 +2416,36 @@ export default function App() {
                   }}
                 >
                   {renderResumeNode(true)}
+                  {Array.from({ length: Math.max(0, previewPages - 1) }).map((_, i) => {
+                    const y = (i + 1) * PRINTABLE_PAGE_HEIGHT_PX
+                    return (
+                      <React.Fragment key={`editor-page-guide-${i}`}>
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: y,
+                            borderTop: '1px dashed rgba(148,163,184,0.6)',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: y + 1,
+                            height: PREVIEW_PAGE_GAP_PX,
+                            background: D ? 'rgba(15,23,42,0.16)' : 'rgba(226,232,240,0.5)',
+                            borderTop: '1px solid rgba(148,163,184,0.35)',
+                            borderBottom: '1px solid rgba(148,163,184,0.35)',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                      </React.Fragment>
+                    )
+                  })}
                   {selectedTextBoxes.map(tb => (
                     <div
                       key={tb.id}

@@ -77,6 +77,7 @@ export interface Author {
   skills?: Skill[];
   expertise?: string[];
   specializations?: string[];
+  languages?: string[];
   interests?: string[];
   education?: string;
   certifications?: Certification[];
