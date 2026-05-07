@@ -65,6 +65,24 @@ def _is_non_experience_line(line: str) -> bool:
     if not normalized:
         return True
 
+    # Pipe rows: project tables, skills catalogs, client/environment lines — never job bullets
+    if "|" in line:
+        left = line.split("|", 1)[0].strip()
+        left_norm = re.sub(r"\s+", " ", left).lower().rstrip(":")
+        if re.match(r"^project\s*\d+", left_norm):
+            return True
+        catalog_prefixes = (
+            "client",
+            "role",
+            "environment",
+            "languages",
+            "databases",
+            "microsoft azure",
+        )
+        for p in catalog_prefixes:
+            if left_norm == p or left_norm.startswith(f"{p} ") or left_norm.startswith(f"{p}:"):
+                return True
+
     exact_headings = {
         "projects summary",
         "description:",
@@ -81,9 +99,12 @@ def _is_non_experience_line(line: str) -> bool:
 
     boundary_patterns = [
         r"^project\s*\d+\s*:",
+        r"^project\s*\d+\s*\|",
         r"^(client|role|environment|languages|databases|microsoft azure)\s*\|",
         r"^i hereby declare\b",
         r"^place\s*:",
+        r"\bhereby declare\b",
+        r"^\s*place\s*:",
     ]
     return any(re.search(pattern, normalized) for pattern in boundary_patterns)
 
@@ -162,6 +183,27 @@ def _sanitize_projects(raw: Any) -> list[dict[str, str]]:
             }
         )
     return out
+
+
+def clean_experience_highlights_value(value: Any) -> list[str]:
+    """Public: strip invalid lines from experience bullets (used after LLM + merge)."""
+    return _sanitize_experience_highlights(_to_non_empty_lines(value))
+
+
+def is_disallowed_experience_bullet_line(line: str) -> bool:
+    """True if this line must not appear in experience.highlights (projects/skills/declaration rows)."""
+    stripped = line.strip().lstrip("•▸- ").strip()
+    return _is_non_experience_line(stripped)
+
+
+def re_sanitize_all_experience_highlights(normalized: dict) -> None:
+    """Re-run highlight filters on every experience entry (e.g. after verbatim merge)."""
+    exps = normalized.get("experience")
+    if not isinstance(exps, list):
+        return
+    for exp in exps:
+        if isinstance(exp, dict):
+            exp["highlights"] = clean_experience_highlights_value(exp.get("highlights"))
 
 
 def normalize_resume_response(raw_response: dict) -> dict:

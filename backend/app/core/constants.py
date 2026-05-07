@@ -29,6 +29,12 @@ DO NOT (MANDATORY):
 - Do NOT carry company overview paragraphs into unrelated role highlights.
 - Do NOT include personal declaration lines (e.g., "I hereby declare...", "Place: ...") inside experience/projects.
 
+ABSOLUTELY FORBIDDEN inside experience.highlights (even if they appear after a job in the source file):
+- Declaration/signature: "I hereby declare", "Place:", name/signature lines
+- Skills/tech catalog rows: "Languages | ...", "Databases | ...", "Microsoft Azure | ..."
+- Project/table rows: "Projects Summary", "Project 1:".."Project 4:", "Client |", "Role |", "Environment |"
+These belong in projects[], techStack, skills, or are footer-only — never duplicate them as job bullets.
+
 If the resume includes lines like "[Table 1]" and rows "Label | Value", treat pipe-separated rows as structured fields — e.g. project tables with Environment/Client/Role map into projects[].technology/description/titles; skill category tables feed techStack verbatim.
 
 ═══════════════════════════

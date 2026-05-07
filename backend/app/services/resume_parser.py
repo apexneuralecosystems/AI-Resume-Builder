@@ -11,7 +11,11 @@ from fastapi import HTTPException, UploadFile
 from app.core.config import Settings
 from app.core.constants import JD_PROMPT_ADDITION, NO_JD_STRICT_ADDITION, SYSTEM_PROMPT
 from app.schemas.resume_output import ResumeOutput
-from app.services.response_normalizer import normalize_resume_response
+from app.services.response_normalizer import (
+    normalize_resume_response,
+    re_sanitize_all_experience_highlights,
+    is_disallowed_experience_bullet_line,
+)
 from app.services.section_integrity import compute_section_integrity
 from app.services.text_extractor import extract_text
 
@@ -36,13 +40,36 @@ def _is_section_heading(line: str) -> bool:
         "work experience",
         "employment history",
         "projects",
+        "projects summary",
         "education",
         "skills",
         "technical skills",
         "certifications",
         "interests",
         "languages",
+        "declaration",
+        "roles and responsibilities",
     }
+
+
+def _should_stop_experience_extraction(line: str) -> bool:
+    """Stop scanning highlights when resume tail (projects block, declaration, skill tables) begins."""
+    n = _normalize_line(line).lower().rstrip(":")
+    if "hereby declare" in n:
+        return True
+    if n.startswith("projects summary") or n == "projects summary":
+        return True
+    if re.match(r"^project\s*\d+", n):
+        return True
+    if n.startswith("languages ") and "|" in line:
+        return True
+    if n.startswith("databases ") and "|" in line:
+        return True
+    if "microsoft azure" in n and "|" in line:
+        return True
+    if n.startswith("place:") or n.startswith("place :"):
+        return True
+    return False
 
 
 def _merge_missing_experience_highlights(normalized: dict, resume_text: str) -> None:
@@ -96,6 +123,8 @@ def _merge_missing_experience_highlights(normalized: dict, resume_text: str) -> 
         extracted: list[str] = []
         seen: set[str] = set()
         for raw in candidate_lines:
+            if _should_stop_experience_extraction(raw):
+                break
             nline = _normalize_line(raw).lstrip("•-▸")
             if not nline or _is_section_heading(raw):
                 continue
@@ -104,6 +133,8 @@ def _merge_missing_experience_highlights(normalized: dict, resume_text: str) -> 
             if len(nline) < 12:
                 continue
             clean = raw.lstrip("•-▸ ").strip()
+            if is_disallowed_experience_bullet_line(clean):
+                continue
             key = _normalize_line(clean)
             if not key or key in seen:
                 continue
@@ -188,6 +219,7 @@ async def parse_resume_payload(
     )
     normalized = normalize_resume_response(llm_response)
     _merge_missing_experience_highlights(normalized, resume_text)
+    re_sanitize_all_experience_highlights(normalized)
     # Guaranteed exact copy of parsed file text (no LLM truncation/rewriting applies here)
     normalized["verbatimResumeText"] = resume_text
     normalized["verbatimJobDescriptionText"] = (
