@@ -637,10 +637,8 @@ export default function App() {
       return
     }
     const updatePages = () => {
-      const measureShell = measureRef.current?.querySelector('#resume-document-template') as HTMLElement | null
-      if (measureShell) keepExperienceHeadingWithContent(measureShell)
-      const previewShell = previewRef.current?.querySelector('#resume-document-template') as HTMLElement | null
-      if (previewShell) keepExperienceHeadingWithContent(previewShell)
+      // Do not run page-break heuristics on the live preview DOM — wrong offsetParent math caused
+      // false breaks and huge blank gaps; print/export clones still run keepExperienceHeadingWithContent.
       const el = measureRef.current?.querySelector('#resume-printable-area') as HTMLElement | null
       const h = el?.scrollHeight ?? PAGE_HEIGHT_PX
       // Match print preview pagination by using printable content height
@@ -1500,6 +1498,22 @@ export default function App() {
     setPromptChatById(prev => ({ ...prev, [selectedId]: [] }))
   }
 
+  /** Y position of element relative to #resume-printable-area top (offsetTop is wrong here — offsetParent chain). */
+  function getTopWithinPrintableArea(root: HTMLElement, el: HTMLElement): number {
+    const printable = root.querySelector('#resume-printable-area') as HTMLElement | null
+    if (!printable) {
+      return el.offsetTop
+    }
+    const pr = printable.getBoundingClientRect()
+    const er = el.getBoundingClientRect()
+    return er.top - pr.top + printable.scrollTop
+  }
+
+  function posModPage(y: number, pageH: number): number {
+    const m = y % pageH
+    return m < 0 ? m + pageH : m
+  }
+
   function applyBottomSafeZoneBreaks(root: HTMLElement) {
     const pageContentHeightPx = PRINTABLE_PAGE_HEIGHT_PX
     // Allow using the page end when 3-4 lines can still fit.
@@ -1508,7 +1522,7 @@ export default function App() {
     const blocks = root.querySelectorAll<HTMLElement>(blockSelectors.join(','))
     blocks.forEach((block) => {
       if (block.offsetHeight >= pageContentHeightPx * 0.7) return
-      const startInPage = block.offsetTop % pageContentHeightPx
+      const startInPage = posModPage(getTopWithinPrintableArea(root, block), pageContentHeightPx)
       const remainingSpacePx = pageContentHeightPx - startInPage
       if (remainingSpacePx < minUsableLinesPx) {
         block.style.breakBefore = 'page'
@@ -1527,7 +1541,7 @@ export default function App() {
       const heading = block.querySelector<HTMLElement>('.resume-experience-heading')
       if (!heading) return
 
-      const blockStart = block.offsetTop % pageContentHeightPx
+      const blockStart = posModPage(getTopWithinPrintableArea(root, block), pageContentHeightPx)
       const remainingPx = pageContentHeightPx - blockStart
 
       const firstBullet = block.querySelector<HTMLElement>('.resume-experience-bullet')
@@ -1535,7 +1549,8 @@ export default function App() {
       const bulletHeight = Math.max(firstBullet?.offsetHeight || 0, 20)
       const requiredPx = headingHeight + bulletHeight + 10
 
-      if (remainingPx < requiredPx) {
+      // Only force a new page when truly near the bottom of a virtual sheet (avoid false positives).
+      if (remainingPx < requiredPx && remainingPx >= 0 && blockStart > pageContentHeightPx * 0.55) {
         block.style.breakBefore = 'page'
         ;(block.style as CSSStyleDeclaration).pageBreakBefore = 'always'
       }
